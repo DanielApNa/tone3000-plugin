@@ -269,6 +269,10 @@ export interface ChainState {
       models split their phase instances across cores; set via
       `setMultiCore`. */
   multiCore: boolean;
+  /** Mute-on-tuner (machine-wide user setting). When true, the chain output
+      is smoothly muted for as long as the tuner is enabled; set via
+      `setMuteOnTuner`. */
+  muteOnTuner: boolean;
   /** The chain-domain processing rate (fixed 48000: the whole chain runs at
       48 kHz behind one resampling boundary). The EQ curve math needs it to
       mirror the audio exactly. */

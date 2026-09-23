@@ -15,6 +15,7 @@
 namespace {
 
 constexpr auto kMultiCoreKey = "multiCore";
+constexpr auto kMuteOnTunerKey = "muteOnTuner";
 constexpr auto kNamSlimSizeDefaultKey = "namSlimSizeDefault";
 constexpr auto kWebInspectorKey = "webInspector";
 
@@ -56,6 +57,10 @@ juce::File TONE3000Processor::getSettingsFile() {
 
 bool TONE3000Processor::readPersistedMultiCoreEnabled() {
   return juce::PropertiesFile(userSettingsOptions()).getBoolValue(kMultiCoreKey, true);
+}
+
+bool TONE3000Processor::readPersistedMuteOnTunerEnabled() {
+  return juce::PropertiesFile(userSettingsOptions()).getBoolValue(kMuteOnTunerKey, false);
 }
 
 double TONE3000Processor::readPersistedNamSlimSizeDefault() {
@@ -101,6 +106,24 @@ void TONE3000Processor::setMultiCoreEnabled(bool enabled, bool persist) {
   }
 
   juce::Logger::writeToLog(juce::String("[Processor] Multi-core processing ") +
+                           (enabled ? "enabled" : "disabled"));
+  bumpChainRevision();
+}
+
+void TONE3000Processor::setMuteOnTunerEnabled(bool enabled, bool persist) {
+  if (muteOnTunerEnabled.load() == enabled)
+    return;
+
+  // No fade here: the actual mute is applied via tunerMuteGain, smoothed on
+  // the audio thread, so flipping this atomic is glitch-free on its own.
+  muteOnTunerEnabled.store(enabled);
+  if (persist) {
+    juce::PropertiesFile settings(userSettingsOptions());
+    settings.setValue(kMuteOnTunerKey, enabled);
+    settings.saveIfNeeded();
+  }
+
+  juce::Logger::writeToLog(juce::String("[Processor] Mute on tuner ") +
                            (enabled ? "enabled" : "disabled"));
   bumpChainRevision();
 }

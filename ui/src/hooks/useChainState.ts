@@ -32,6 +32,7 @@ const EMPTY_STATE: ChainState = {
   inputMode: 'stereo',
   namSlimSizeDefault: SLIM_SIZE_LITE,
   multiCore: true,
+  muteOnTuner: false,
   sampleRate: 48000,
   chain: [],
 };
@@ -75,6 +76,7 @@ export function useChainState() {
       setBlockSlimSize: backend.getPluginFunction('setBlockSlimSize'),
       setNamSlimSizeDefault: backend.getPluginFunction('setNamSlimSizeDefault'),
       setMultiCore: backend.getPluginFunction('setMultiCore'),
+      setMuteOnTuner: backend.getPluginFunction('setMuteOnTuner'),
       setActiveEditChain: backend.getPluginFunction('setActiveEditChain'),
       swapChains: backend.getPluginFunction('swapChains'),
       setChainBranch: backend.getPluginFunction('setChainBranch'),
@@ -210,6 +212,10 @@ export function useChainState() {
       /** Multi-core processing (machine-wide). Pure scheduling: applies
           instantly and persists on disk. */
       setMultiCore: (enabled: boolean) => run('setMultiCore', () => native.setMultiCore(enabled)),
+      /** Mute-on-tuner (machine-wide). Persists on disk; applies with a
+          short glide, not an instant click. */
+      setMuteOnTuner: (enabled: boolean) =>
+        run('setMuteOnTuner', () => native.setMuteOnTuner(enabled)),
       setActiveSide: (side: ChainSide) =>
         run('setActiveEditChain', () => native.setActiveEditChain(side)),
       /** Swap the Left and Right chains wholesale (stereo only). Undoable. */
@@ -274,6 +280,7 @@ export function useChainState() {
     inputMode: state.inputMode ?? 'stereo',
     namSlimSizeDefault: state.namSlimSizeDefault ?? SLIM_SIZE_LITE,
     multiCore: state.multiCore ?? true,
+    muteOnTuner: state.muteOnTuner ?? false,
     standalone: state.standalone ?? false,
     sampleRate: state.sampleRate || 48000,
     refresh,

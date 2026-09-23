@@ -761,6 +761,12 @@ void TONE3000Processor::prepareToPlay(double sampleRate, int samplesPerBlock) {
   outputGainSmoother.reset(sampleRate, 0.02);
   outputGainSmoother.setCurrentAndTargetValue(mainStageGain(cacheOutputLevel));
 
+  // Mute-on-tuner gain: start unmuted (a restored session shouldn't open
+  // silent), the same 20 ms ramp as the output gain so it's inaudible as a
+  // click either way.
+  tunerMuteGain.reset(sampleRate, 0.02);
+  tunerMuteGain.setCurrentAndTargetValue(1.0f);
+
   // Post-chain image matrix (balance × pan, or the mono fold): 20 ms ramps,
   // primed from the current parameters and rig so a restored session doesn't
   // fade in from the wrong image, chain balance or fold. Mirrors the gain
@@ -1600,8 +1606,15 @@ void TONE3000Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
   // Feed the tuner from the raw input (pre-gain, pre-gate) while the tuner
   // screen is open. Channel 0 only: guitar sources are mono, and mixing
   // channels risks phase cancellation.
-  if (tuner.isEnabled())
+  const bool tunerActive = tuner.isEnabled();
+  if (tunerActive)
     tuner.pushSamples(buffer.getReadPointer(0), numSamples);
+
+  // Mute-on-tuner: target silence while the tuner is reading pitch and the
+  // preference is on. Set early so the ramp has the whole block to glide;
+  // actually applied down in the output gain pass below.
+  tunerMuteGain.setTargetValue(
+      (tunerActive && muteOnTunerEnabled.load(std::memory_order_relaxed)) ? 0.0f : 1.0f);
 
   // Apply the input gain (vectorized).
   for (int ch = 0; ch < numChannels; ++ch)
@@ -1803,7 +1816,7 @@ void TONE3000Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
     auto* l = buffer.getWritePointer(0);
     auto* r = numChannels > 1 ? buffer.getWritePointer(1) : nullptr;
     for (int i = 0; i < numSamples; ++i) {
-      const float g = outputGainSmoother.getNextValue();
+      const float g = outputGainSmoother.getNextValue() * tunerMuteGain.getNextValue();
       l[i] *= g;
       peakL = std::max(peakL, std::abs(l[i]));
       if (r) {

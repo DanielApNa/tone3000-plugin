@@ -1182,6 +1182,7 @@ juce::var TONE3000Processor::getChainState(int knownRevision) const {
   // with a revision bump, like everything else Settings displays.
   state->setProperty("namSlimSizeDefault", namSlimSizeDefault.load());
   state->setProperty("multiCore", multiCoreEnabled.load());
+  state->setProperty("muteOnTuner", muteOnTunerEnabled.load());
   // The EQ editor mirrors the biquad math client-side; block EQs run in the
   // chain domain, so the drawn curve must use the live chain rate (48 kHz x
   // oversampling factor), not the host rate (see ChainDomain.h).

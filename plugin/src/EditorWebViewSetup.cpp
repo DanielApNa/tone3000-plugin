@@ -336,6 +336,14 @@ juce::WebBrowserComponent::Options buildMainWebViewOptions(TONE3000Editor* edito
             editor->processor.setMultiCoreEnabled(coerceBool(args[0]));
             return juce::var(true);
           }))
+      .withNativeFunction(
+          // Machine-wide: mute the chain output while the tuner screen is
+          // enabled. Persists in the shared settings file; the current
+          // value rides getChainState as `muteOnTuner`.
+          "setMuteOnTuner", guarded(1, false, [editor](const juce::Array<juce::var>& args) {
+            editor->processor.setMuteOnTunerEnabled(coerceBool(args[0]));
+            return juce::var(true);
+          }))
       // --- Per-block params / EQ / spectrum ---------------------------------
       .withNativeFunction(
           // Single entry point for per-block user params:

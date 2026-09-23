@@ -401,6 +401,14 @@ public:
   void setTunerEnabled(bool enabled) { tuner.setEnabled(enabled); }
   juce::var getTunerReading() { return tuner.getReading(); }
 
+  // Mute-on-tuner (machine-wide user setting, like multi-core). When on,
+  // the chain output is smoothly muted for as long as the tuner is enabled,
+  // so silent tuning doesn't also mean fumbling for the DAW's mute button.
+  // Independent of setTunerEnabled: this only decides whether the tuner
+  // being on also silences the output.
+  bool getMuteOnTunerEnabled() const { return muteOnTunerEnabled.load(); }
+  void setMuteOnTunerEnabled(bool enabled, bool persist = true);
+
   // Auto balance: one-shot chain energy match.
   // startAutoBalance() arms a "listening" measurement: the audio thread
   // accumulates the raw chain outputs' energy (pre-balance, pre-pan, so the
@@ -851,6 +859,12 @@ private:
   // of stepping once per block. Audio thread only.
   juce::SmoothedValue<float> outputGainSmoother;
 
+  // Mute-on-tuner output gain (1 = normal, 0 = muted), smoothed like
+  // outputGainSmoother so the toggle and tuner open/close never click.
+  // Audio thread only; target set each block from muteOnTunerEnabled + the
+  // tuner's own enabled flag.
+  juce::SmoothedValue<float> tunerMuteGain;
+
   // Monotonic revision of everything getChainState() reports. Bumped on every
   // chain mutation (structure, params, load completion, stereo/side changes)
   // so the UI can cheaply skip resyncs when nothing changed. Mutable + const:
@@ -933,6 +947,11 @@ private:
   RtWorkerPool rtWorkerPool;
   static bool readPersistedMultiCoreEnabled();
   std::atomic<bool> multiCoreEnabled{readPersistedMultiCoreEnabled()};
+
+  // Mute-on-tuner (see the public getMuteOnTunerEnabled). Off by default:
+  // existing users get the same behavior as before until they opt in.
+  static bool readPersistedMuteOnTunerEnabled();
+  std::atomic<bool> muteOnTunerEnabled{readPersistedMuteOnTunerEnabled()};
   // Hosts hand the device's os_workgroup here (AU/Standalone on macOS);
   // forward it so the workers get scheduled with the audio deadline.
   void audioWorkgroupContextChanged(const juce::AudioWorkgroup& workgroup) override {

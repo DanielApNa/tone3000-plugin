@@ -65,6 +65,7 @@ export const Plugin: React.FC = () => {
     inputMode,
     namSlimSizeDefault,
     multiCore,
+    muteOnTuner,
     standalone,
     sampleRate,
     refresh,
@@ -591,6 +592,8 @@ export const Plugin: React.FC = () => {
             onNamSlimSizeDefaultChange={actions.setNamSlimSizeDefault}
             multiCore={multiCore}
             onMultiCoreChange={actions.setMultiCore}
+            muteOnTuner={muteOnTuner}
+            onMuteOnTunerChange={actions.setMuteOnTuner}
             chain={chain}
             chainRight={chainRight}
           />

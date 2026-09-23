@@ -103,6 +103,9 @@ interface SettingsProps {
       models across CPU cores). */
   multiCore: boolean;
   onMultiCoreChange: (enabled: boolean) => void;
+  /** Mute the chain output while the tuner screen is enabled. */
+  muteOnTuner: boolean;
+  onMuteOnTunerChange: (enabled: boolean) => void;
   /** Chain lanes; MIDI Mapping names block-power targets after the tone
       currently in each slot. `chainRight` is null outside stereo. */
   chain: ChainItem[];
@@ -185,6 +188,8 @@ export const Settings: React.FC<SettingsProps> = ({
   onNamSlimSizeDefaultChange,
   multiCore,
   onMultiCoreChange,
+  muteOnTuner,
+  onMuteOnTunerChange,
   chain,
   chainRight,
 }) => {
@@ -534,6 +539,13 @@ export const Settings: React.FC<SettingsProps> = ({
         description="Spreads the work across CPU cores for more headroom: stereo chains process in parallel, and oversampled NAM models split across cores. Doesn't change the sound."
         value={multiCore}
         onChange={onMultiCoreChange}
+      />
+
+      <ToggleRow
+        label="Mute While Tuning"
+        description="Silences the output while the tuner is open, so you can tune in silence."
+        value={muteOnTuner}
+        onChange={onMuteOnTunerChange}
       />
 
       {/* MIDI Learn/mapping is plugin-level (reads the processor's MIDI
