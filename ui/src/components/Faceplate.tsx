@@ -1,12 +1,12 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { rem } from '../hooks/useUiScale';
-import { ChevronDown, Equal, Power } from './icons';
+import { ChevronDown, Equal, Link, Power } from './icons';
 import { KnobControl } from './KnobControl';
 import { balanceDbScale, gainDbScale, gateDbScale, toneScale } from './knobScale';
 import { SpreadGroup } from './SpreadControls';
 import { AlignGroup } from './AlignControls';
 import { useParameter } from '../hooks/useParameter';
-import type { InputMode } from '../types/chain';
+import type { ChainSide, InputMode } from '../types/chain';
 import { useAutoMeasure, type AutoMeasureResult } from '../hooks/useAutoMeasure';
 import { useDismissable } from '../hooks/useDismissable';
 import { HELP, helpProps } from './helpText';
@@ -67,6 +67,113 @@ const PowerButton: React.FC<{
     <Power size={ICON_SIZE} />
   </ChromeIconButton>
 );
+
+/**
+ * Noise gate threshold knob + power switch. Powered off, the knob and label
+ * dim and go inert (uiOffClass); the power button stays outside the dimmed
+ * wrapper, bright and clickable, carrying the off state itself.
+ *
+ * `unusedHelp`: the gate can't be heard (its lane branches off the other
+ * lane, so the input channel it gates feeds nothing). The whole control,
+ * power button included, dims and goes inert, and the hint says why.
+ */
+const GateControl: React.FC<{
+  thresholdId: string;
+  enabledId: string;
+  label: string;
+  help: string;
+  powerHelp: string;
+  unusedHelp?: string;
+}> = ({ thresholdId, enabledId, label, help, powerHelp, unusedHelp }) => {
+  const [threshold, setThreshold, onDrag] = useParameter(thresholdId, 'slider');
+  const [enabled, setEnabled] = useParameter(enabledId, 'toggle');
+  return (
+    <div
+      className={uiOffClass(unusedHelp != null)}
+      {...(unusedHelp != null ? helpProps(unusedHelp) : {})}
+      style={{
+        display: 'flex',
+        flexDirection: 'row',
+        alignItems: 'flex-end',
+        gap: '10rem',
+        transition: 'opacity 0.2s ease',
+      }}
+    >
+      <div className={uiOffClass(!enabled)} style={{ transition: 'opacity 0.2s ease' }}>
+        <KnobControl
+          label={label}
+          value={threshold}
+          onChange={setThreshold}
+          size={KNOB_SIZE_SECONDARY}
+          thumb="secondary"
+          scale={gateDbScale}
+          defaultValue={gateDbScale.fromDisplay(-80)}
+          help={help}
+          onDragStateChange={onDrag}
+        />
+      </div>
+      <PowerButton on={enabled} help={powerHelp} onClick={() => setEnabled(!enabled)} />
+    </div>
+  );
+};
+
+/**
+ * Stereo chains: Gate L + Gate R with a link toggle between them. Linked is
+ * the single shared gate (native gates both lanes with the main gate
+ * params), so both knobs bind to the main gate and always read the same.
+ * Unlinking seeds the Right gate from the shared one, so the split starts
+ * from what the user was hearing. Remounted on link changes (key) so each
+ * knob re-subscribes to the parameter it now drives.
+ */
+const StereoGateGroup: React.FC<{ branchTrunk: ChainSide | null }> = ({ branchTrunk }) => {
+  const [linked, setLinked] = useParameter('gateLinked', 'toggle');
+  const [threshold] = useParameter('gateThreshold', 'slider');
+  const [enabled] = useParameter('gateEnabled', 'toggle');
+  const [, setThresholdRight] = useParameter('gateThresholdRight', 'slider');
+  const [, setEnabledRight] = useParameter('gateEnabledRight', 'toggle');
+
+  const handleToggleLink = () => {
+    if (linked) {
+      setThresholdRight(threshold);
+      setEnabledRight(enabled);
+    }
+    setLinked(!linked);
+  };
+
+  const rightIds = linked
+    ? { thresholdId: 'gateThreshold', enabledId: 'gateEnabled' }
+    : { thresholdId: 'gateThresholdRight', enabledId: 'gateEnabledRight' };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-end', gap: '12rem' }}>
+      <GateControl
+        thresholdId="gateThreshold"
+        enabledId="gateEnabled"
+        label="Gate L"
+        help={HELP.gateLeft}
+        powerHelp={HELP.gateLeftPower}
+        unusedHelp={branchTrunk === 'right' ? HELP.gateLeftBranched : undefined}
+      />
+      <ChromeIconButton
+        tone="link"
+        on={linked}
+        help={HELP.gateLink}
+        onClick={handleToggleLink}
+        offsetY={CHROME_LIFT}
+      >
+        <Link size={ICON_SIZE} />
+      </ChromeIconButton>
+      <GateControl
+        key={linked ? 'linked' : 'split'}
+        {...rightIds}
+        label="Gate R"
+        help={HELP.gateRight}
+        powerHelp={HELP.gateRightPower}
+        unusedHelp={branchTrunk === 'left' ? HELP.gateRightBranched : undefined}
+      />
+    </div>
+  );
+};
 
 /** Two overlapping circles, the classic stereo glyph (lucide has none). */
 const StereoIcon: React.FC<{ style?: React.CSSProperties }> = ({ style }) => (
@@ -338,9 +445,11 @@ interface FaceplateProps {
   stereoChains: boolean;
   /** Plugin is fed a real stereo source; shows the input-mode button. */
   stereoInput: boolean;
-  /** A chain branch is active; hides the "Stereo" input routing (the chain
-      has a single mono source while branched). */
-  branched: boolean;
+  /** Trunk lane of the active chain branch, or null when unbranched. A
+      branch hides the "Stereo" input routing (the chain has a single mono
+      source while branched) and makes the branch lane's gate unused: that
+      lane takes its input from the trunk, not from the channel it gates. */
+  branchTrunk: ChainSide | null;
   inputMode: InputMode;
   onInputModeChange: (mode: InputMode) => void;
 }
@@ -352,16 +461,15 @@ export const Faceplate = React.memo(function Faceplate({
   stereoOutput,
   stereoChains,
   stereoInput,
-  branched,
+  branchTrunk,
   inputMode,
   onInputModeChange,
 }: FaceplateProps) {
+  const branched = branchTrunk != null;
   const [inputLevel, setInputLevel, onInputDrag] = useParameter('inputLevel', 'slider');
   const [toneBass, setToneBass, onBassDrag] = useParameter('toneBass', 'slider');
   const [toneMid, setToneMid, onMidDrag] = useParameter('toneMid', 'slider');
   const [toneTreble, setToneTreble, onTrebleDrag] = useParameter('toneTreble', 'slider');
-  const [noiseGate, setNoiseGate, onGateDrag] = useParameter('gateThreshold', 'slider');
-  const [gateEnabled, setGateEnabled] = useParameter('gateEnabled', 'toggle');
   const [toneEqEnabled, setToneEqEnabled] = useParameter('toneEqEnabled', 'toggle');
 
   return (
@@ -398,36 +506,20 @@ export const Faceplate = React.memo(function Faceplate({
         )}
       </div>
 
-      {/* Powered-off sections: knobs + labels dim and go inert (uiOffClass);
-          the power button stays outside the dimmed wrapper, bright and
-          clickable, carrying the off state itself. */}
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'row',
-          alignItems: 'flex-end',
-          gap: '10rem',
-        }}
-      >
-        <div className={uiOffClass(!gateEnabled)} style={{ transition: 'opacity 0.2s ease' }}>
-          <KnobControl
-            label="Gate"
-            value={noiseGate}
-            onChange={setNoiseGate}
-            size={KNOB_SIZE_SECONDARY}
-            thumb="secondary"
-            scale={gateDbScale}
-            defaultValue={gateDbScale.fromDisplay(-80)}
-            help={HELP.gate}
-            onDragStateChange={onGateDrag}
-          />
-        </div>
-        <PowerButton
-          on={gateEnabled}
-          help={HELP.gatePower}
-          onClick={() => setGateEnabled(!gateEnabled)}
+      {/* Stereo chains get one gate per lane: each lane feeds a different
+          amp, and a high-gain lane wants a tighter gate than a clean one.
+          The main gate params drive the Left lane there. */}
+      {stereoChains ? (
+        <StereoGateGroup branchTrunk={branchTrunk} />
+      ) : (
+        <GateControl
+          thresholdId="gateThreshold"
+          enabledId="gateEnabled"
+          label="Gate"
+          help={HELP.gate}
+          powerHelp={HELP.gatePower}
         />
-      </div>
+      )}
 
       <div
         style={{

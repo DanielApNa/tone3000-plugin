@@ -187,6 +187,15 @@ const HELP_DESKTOP = {
   // Faceplate: gate, tone stack, stereo image (spread / align)
   gate: knobHelp('Gate', 'noise gate threshold, -100 to 0 dB.'),
   gatePower: 'Gate Power: noise gate on/off.',
+  gateLeft: knobHelp('Gate L', 'left chain noise gate threshold, -100 to 0 dB.'),
+  gateLeftPower: 'Gate L Power: left chain noise gate on/off.',
+  gateRight: knobHelp('Gate R', 'right chain noise gate threshold, -100 to 0 dB.'),
+  gateRightPower: 'Gate R Power: right chain noise gate on/off.',
+  gateLink: 'Link Gates: one shared gate on both chains. Off: separate L/R gates.',
+  gateLeftBranched:
+    'Gate L: unused while the left chain branches off the right one. Gate R gates both.',
+  gateRightBranched:
+    'Gate R: unused while the right chain branches off the left one. Gate L gates both.',
   toneBass: knobHelp('Bass', 'tone stack lows, 0-10: ±20 dB shelf at 150 Hz.'),
   toneMiddle: knobHelp('Middle', 'tone stack mids, 0-10: ±15 dB bell at 425 Hz.'),
   toneTreble: knobHelp('Treble', 'tone stack highs, 0-10: ±10 dB shelf at 1.8 kHz.'),

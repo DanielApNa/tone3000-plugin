@@ -30,12 +30,13 @@
  *    is fully open before a pick transient develops.
  *
  * No lookahead and no internal buffering - zero added latency, safe for
- * live monitoring. Channels (up to 2) are fully independent: in stereo mode
- * the two lanes may carry different instruments, and for mono/duplicated
- * sources identical inputs produce identical gains anyway.
+ * live monitoring. Channels (up to 2) are fully independent, threshold
+ * included: in stereo chain mode each lane feeds a different amp, and each
+ * amp wants its own gate. For mono/duplicated sources with one shared
+ * threshold, identical inputs produce identical gains anyway.
  *
- * Threading: prepare()/reset() from prepareToPlay, setThresholdDb() and
- * process() from the audio thread. process() allocates nothing and costs a
+ * Threading: prepare()/reset() from prepareToPlay, setThresholdDb(),
+ * resetChannel() and process()/processChannel() from the audio thread. process() allocates nothing and costs a
  * handful of multiplies per sample. Denormals are handled by the caller's
  * ScopedNoDenormals.
  */
@@ -72,20 +73,36 @@ public:
       the enabled->disabled->enabled transition so a stale envelope never
       decides the first block. */
   void reset() {
-    for (auto& channel : channels)
-      channel = {};
+    for (int ch = 0; ch < kMaxChannels; ++ch)
+      resetChannel(ch);
+  }
+
+  /** Clears one channel's detector/gain state (its threshold is kept), for
+      a channel whose own power switch just came back on. */
+  void resetChannel(int channel) {
+    auto& c = channels[static_cast<size_t>(channel)];
+    const Threshold keep = c.threshold;
+    c = {};
+    c.threshold = keep;
   }
 
   /** Audio thread, once per block. The knob value is the open threshold; the
       close threshold sits kHysteresisDb below it. Early-outs when unchanged,
       so the transcendentals only run on actual knob moves. */
-  void setThresholdDb(float thresholdDb) {
-    if (thresholdDb == currentThresholdDb)
+  void setThresholdDb(int channel, float thresholdDb) {
+    auto& t = channels[static_cast<size_t>(channel)].threshold;
+    if (thresholdDb == t.currentDb)
       return;
-    currentThresholdDb = thresholdDb;
-    openThreshold = juce::Decibels::decibelsToGain(thresholdDb);
-    closeThreshold = juce::Decibels::decibelsToGain(thresholdDb - kHysteresisDb);
-    invOpenThreshold = 1.0f / openThreshold;
+    t.currentDb = thresholdDb;
+    t.open = juce::Decibels::decibelsToGain(thresholdDb);
+    t.close = juce::Decibels::decibelsToGain(thresholdDb - kHysteresisDb);
+    t.invOpen = 1.0f / t.open;
+  }
+
+  /** Same threshold on every channel. */
+  void setThresholdDb(float thresholdDb) {
+    for (int ch = 0; ch < kMaxChannels; ++ch)
+      setThresholdDb(ch, thresholdDb);
   }
 
   /** Audio thread. Gates up to kMaxChannels in place. */
@@ -93,7 +110,13 @@ public:
     const int numChannels = juce::jmin(buffer.getNumChannels(), kMaxChannels);
     const int numSamples = buffer.getNumSamples();
     for (int ch = 0; ch < numChannels; ++ch)
-      processChannel(channels[static_cast<size_t>(ch)], buffer.getWritePointer(ch), numSamples);
+      processChannel(ch, buffer.getWritePointer(ch), numSamples);
+  }
+
+  /** Audio thread. Gates one channel in place with that channel's own
+      threshold and detector state. */
+  void processChannel(int channel, float* samples, int numSamples) noexcept {
+    processChannel(channels[static_cast<size_t>(channel)], samples, numSamples);
   }
 
 private:
@@ -110,7 +133,15 @@ private:
 
   enum class State { closed, open, holding };
 
+  // Threshold state (recomputed only on knob moves; the sentinel forces the
+  // first setThresholdDb() to compute).
+  struct Threshold {
+    float currentDb = 1.0f;
+    float open = 1.0f, close = 1.0f, invOpen = 1.0f;
+  };
+
   struct Channel {
+    Threshold threshold;
     float svfIc1 = 0.0f, svfIc2 = 0.0f;  // sidechain SVF integrator state
     float lowpassState = 0.0f;
     float envelope = 0.0f;
@@ -120,6 +151,9 @@ private:
   };
 
   void processChannel(Channel& c, float* samples, int numSamples) const noexcept {
+    const float openThreshold = c.threshold.open;
+    const float closeThreshold = c.threshold.close;
+    const float invOpenThreshold = c.threshold.invOpen;
     for (int i = 0; i < numSamples; ++i) {
       const float x = samples[i];
 
@@ -186,11 +220,6 @@ private:
   int holdSamples = 0;
   float svfK = 1.0f, svfA1 = 1.0f, svfA2 = 0.0f, svfA3 = 0.0f;
   float lowpassCoeff = 1.0f;
-
-  // Threshold state (recomputed only on knob moves; sentinel forces the
-  // first setThresholdDb() to compute).
-  float currentThresholdDb = 1.0f;
-  float openThreshold = 1.0f, closeThreshold = 1.0f, invOpenThreshold = 1.0f;
 
   std::array<Channel, kMaxChannels> channels;
 };

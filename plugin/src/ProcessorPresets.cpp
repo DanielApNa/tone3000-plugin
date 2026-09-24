@@ -18,6 +18,7 @@ const std::vector<juce::String>& TONE3000Processor::presetParameterIds() {
       "inputLevel",     "outputLevel",      "outputBalance",
       "toneBass",       "toneMid",          "toneTreble",
       "gateThreshold",  "gateEnabled",      "toneEqEnabled",
+      "gateThresholdRight", "gateEnabledRight", "gateLinked",
       "spreadEnabled",  "spreadOffset",     "spreadWobble",
       "spreadWobbleEnabled", "spreadCrossover", "spreadCrossoverEnabled",
       "spreadDiffuseEnabled",
@@ -154,13 +155,19 @@ bool TONE3000Processor::loadPreset(const juce::String& presetId) {
   // from the file (saved before a parameter existed) land on the parameter
   // default, so a preset always restores the same rig. Gestured so hosts
   // treat this like a user edit (automation write modes record it instead
-  // of fighting it).
+  // of fighting it). One exception: presets saved before the per-lane gate
+  // carry only the main gate, which then gated both lanes, so the Right
+  // gate inherits it and the preset still sounds the way it was saved.
   const juce::ValueTree params = preset.getChildWithName("Params");
   for (const auto& paramId : presetParameterIds()) {
     auto* p = parameters.getParameter(paramId);
     if (p == nullptr)
       continue;
-    const juce::ValueTree paramTree = params.getChildWithProperty("id", paramId);
+    juce::ValueTree paramTree = params.getChildWithProperty("id", paramId);
+    if (!paramTree.isValid() && paramId == "gateThresholdRight")
+      paramTree = params.getChildWithProperty("id", "gateThreshold");
+    else if (!paramTree.isValid() && paramId == "gateEnabledRight")
+      paramTree = params.getChildWithProperty("id", "gateEnabled");
     const float norm =
         paramTree.isValid()
             ? p->convertTo0to1(

@@ -148,6 +148,9 @@ private:
   juce::WebSliderRelay trebleRelay{"toneTreble"};
   juce::WebSliderRelay gateThresholdRelay{"gateThreshold"};
   juce::WebToggleButtonRelay gateEnabledRelay{"gateEnabled"};
+  juce::WebSliderRelay gateThresholdRightRelay{"gateThresholdRight"};
+  juce::WebToggleButtonRelay gateEnabledRightRelay{"gateEnabledRight"};
+  juce::WebToggleButtonRelay gateLinkedRelay{"gateLinked"};
   juce::WebToggleButtonRelay toneEqEnabledRelay{"toneEqEnabled"};
   juce::WebToggleButtonRelay calibrateInputRelay{"calibrateInput"};
   juce::WebSliderRelay inputCalibrationLevelRelay{"inputCalibrationLevel"};
@@ -221,6 +224,12 @@ private:
       *processor.parameters.getParameter("toneTreble"), trebleRelay, nullptr};
   juce::WebSliderParameterAttachment gateThresholdWebAttachment{
       *processor.parameters.getParameter("gateThreshold"), gateThresholdRelay, nullptr};
+  juce::WebSliderParameterAttachment gateThresholdRightWebAttachment{
+      *processor.parameters.getParameter("gateThresholdRight"), gateThresholdRightRelay, nullptr};
+  juce::WebToggleButtonParameterAttachment gateEnabledRightWebAttachment{
+      *processor.parameters.getParameter("gateEnabledRight"), gateEnabledRightRelay, nullptr};
+  juce::WebToggleButtonParameterAttachment gateLinkedWebAttachment{
+      *processor.parameters.getParameter("gateLinked"), gateLinkedRelay, nullptr};
   juce::WebToggleButtonParameterAttachment calibrateInputWebAttachment{
       *processor.parameters.getParameter("calibrateInput"), calibrateInputRelay, nullptr};
   juce::WebSliderParameterAttachment inputCalibrationLevelWebAttachment{

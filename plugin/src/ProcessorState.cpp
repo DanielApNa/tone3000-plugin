@@ -290,6 +290,22 @@ void TONE3000Processor::setStateInformation(const void* data, int sizeInBytes) {
 
   juce::ValueTree parameterState = state.getChildWithName("PARAMETERS");
   if (parameterState.isValid()) {
+    // Sessions saved before the per-lane gate carry only the main gate,
+    // which then gated both lanes: seed the Right gate from it so a stereo
+    // rig restores sounding the way it was saved.
+    parameterState = parameterState.createCopy();
+    for (const auto& [rightId, mainId] :
+         {std::pair{"gateThresholdRight", "gateThreshold"},
+          std::pair{"gateEnabledRight", "gateEnabled"}}) {
+      if (parameterState.getChildWithProperty("id", rightId).isValid())
+        continue;
+      const juce::ValueTree main = parameterState.getChildWithProperty("id", mainId);
+      if (main.isValid()) {
+        juce::ValueTree right = main.createCopy();
+        right.setProperty("id", rightId, nullptr);
+        parameterState.appendChild(right, nullptr);
+      }
+    }
     parameters.replaceState(parameterState);
     DBG("Parameters restored from state");
   }

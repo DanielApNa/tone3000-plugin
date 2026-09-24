@@ -126,6 +126,9 @@ void TONE3000Processor::resolveParamRefs() {
   paramRefs.toneTreble = get("toneTreble");
   paramRefs.gateThreshold = get("gateThreshold");
   paramRefs.gateEnabled = get("gateEnabled");
+  paramRefs.gateThresholdRight = get("gateThresholdRight");
+  paramRefs.gateEnabledRight = get("gateEnabledRight");
+  paramRefs.gateLinked = get("gateLinked");
   paramRefs.toneEqEnabled = get("toneEqEnabled");
   paramRefs.targetLoudness = get("targetLoudness");
   paramRefs.calibrateInput = get("calibrateInput");
@@ -264,6 +267,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout TONE3000Processor::createPar
   layout.add(std::make_unique<juce::AudioParameterChoice>(
       juce::ParameterID{"osFactor", 35}, "osFactor", juce::StringArray{"2x", "4x", "8x"}, 0,
       juce::AudioParameterChoiceAttributes().withAutomatable(false)));
+
+  // Right-lane noise gate (stereo chain mode): each lane feeds a different
+  // amp, and a high-gain lane wants a tighter gate than a clean one. In
+  // stereo mode gateThreshold/gateEnabled drive the Left lane and these the
+  // Right; in mono mode these are ignored and the main gate covers both
+  // input channels.
+  layout.add(std::make_unique<juce::AudioParameterFloat>(
+      juce::ParameterID{"gateThresholdRight", 36}, "gateThresholdRight", -100.0f, 0.0f, -80.0f));
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"gateEnabledRight", 37}, "gateEnabledRight", true));
+  // Gate link (stereo chain mode): one gate on both lanes, the pre-split
+  // behavior. While linked the main gate params drive both lanes and the
+  // *Right params are ignored; the UI binds both knobs to the main gate.
+  layout.add(std::make_unique<juce::AudioParameterBool>(
+      juce::ParameterID{"gateLinked", 38}, "gateLinked", false));
 
   return layout;
 }
@@ -943,12 +961,15 @@ void TONE3000Processor::updateCachedParameters() {
   updateFloat(cacheMidTone, paramRefs.toneMid, true);
   updateFloat(cacheTrebleTone, paramRefs.toneTreble, true);
   updateFloat(cacheGateThreshold, paramRefs.gateThreshold);
+  updateFloat(cacheGateThresholdRight, paramRefs.gateThresholdRight);
   updateFloat(cacheTargetLoudness, paramRefs.targetLoudness);
   updateFloat(cacheInputCalibrationLevel, paramRefs.inputCalibrationLevel);
 
   auto loadBool = [](const std::atomic<float>* param) { return param->load() > 0.5f; };
   cacheCalibrateInput = loadBool(paramRefs.calibrateInput);
   cacheGateEnabled = loadBool(paramRefs.gateEnabled);
+  cacheGateEnabledRight = loadBool(paramRefs.gateEnabledRight);
+  cacheGateLinked = loadBool(paramRefs.gateLinked);
   cacheToneEqEnabled = loadBool(paramRefs.toneEqEnabled);
   cacheSpreadEnabled = loadBool(paramRefs.spreadEnabled);
   cacheSpreadWobbleEnabled = loadBool(paramRefs.spreadWobbleEnabled);
@@ -1623,14 +1644,28 @@ void TONE3000Processor::processBlock(juce::AudioBuffer<float>& buffer, juce::Mid
   // Noise gate, post input gain so the threshold knob's dB meaning matches
   // the level heading into the chain. Envelope/hysteresis gate (NoiseGate.h);
   // re-enabling resets the detector so a stale envelope never gates the
-  // first block.
-  if (cacheGateEnabled) {
-    if (!gateWasEnabled)
-      inputGate.reset();
-    inputGate.setThresholdDb(cacheGateThreshold);
-    inputGate.process(buffer);
+  // first block. Stereo chain mode splits it per lane: channel 0 feeds the
+  // Left chain (main gate params), channel 1 the Right (the *Right params),
+  // unless the gate link is on. A mono host buffer has no second input
+  // channel to gate on its own: the Right lane mirrors the already-gated
+  // channel 0 (see the chain stage).
+  {
+    const bool perLane = stereoEnabled.load() && !cacheGateLinked;
+    const bool enabled[2] = {cacheGateEnabled,
+                             perLane ? cacheGateEnabledRight : cacheGateEnabled};
+    const float threshold[2] = {cacheGateThreshold,
+                                perLane ? cacheGateThresholdRight : cacheGateThreshold};
+    const int gateChannels = juce::jmin(numChannels, NoiseGate::kMaxChannels);
+    for (int ch = 0; ch < gateChannels; ++ch) {
+      if (enabled[ch]) {
+        if (!gateWasEnabled[ch])
+          inputGate.resetChannel(ch);
+        inputGate.setThresholdDb(ch, threshold[ch]);
+        inputGate.processChannel(ch, buffer.getWritePointer(ch), numSamples);
+      }
+      gateWasEnabled[ch] = enabled[ch];
+    }
   }
-  gateWasEnabled = cacheGateEnabled;
 
   // #########################
   // Auto-align probe injection (see AutoOffset.h): while a measurement is

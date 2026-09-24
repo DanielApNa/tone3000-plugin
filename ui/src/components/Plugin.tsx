@@ -572,7 +572,7 @@ export const Plugin: React.FC = () => {
           stereoOutput={stereoOutput}
           stereoChains={stereoEnabled}
           stereoInput={stereoInput}
-          branched={branch != null}
+          branchTrunk={stereoEnabled && branch ? branch.side : null}
           inputMode={inputMode}
           onInputModeChange={actions.setInputMode}
         />

@@ -982,10 +982,11 @@ private:
   bool toneEqWasEnabled = true;
 
   // Input-stage noise gate (post input gain, host rate). The power switch is
-  // tracked across blocks so re-enabling resets the detector; a stale
-  // envelope must never decide the first block after power-on.
+  // tracked across blocks, per channel (stereo chain mode gives each lane
+  // its own switch), so re-enabling resets the detector; a stale envelope
+  // must never decide the first block after power-on.
   NoiseGate inputGate;
-  bool gateWasEnabled = true;
+  bool gateWasEnabled[NoiseGate::kMaxChannels] = {true, true};
 
   // Raw APVTS parameter atomics, resolved once in the constructor. The audio
   // thread reads these every block; getRawParameterValue is a string-keyed
@@ -1019,6 +1020,9 @@ private:
     std::atomic<float>* toneTreble = nullptr;
     std::atomic<float>* gateThreshold = nullptr;
     std::atomic<float>* gateEnabled = nullptr;
+    std::atomic<float>* gateThresholdRight = nullptr;
+    std::atomic<float>* gateEnabledRight = nullptr;
+    std::atomic<float>* gateLinked = nullptr;
     std::atomic<float>* toneEqEnabled = nullptr;
     std::atomic<float>* targetLoudness = nullptr;
     std::atomic<float>* calibrateInput = nullptr;
@@ -1070,6 +1074,9 @@ private:
   float cacheTrebleTone = 5.0f;
   float cacheGateThreshold = -80.0f;
   bool cacheGateEnabled = true;
+  float cacheGateThresholdRight = -80.0f;
+  bool cacheGateEnabledRight = true;
+  bool cacheGateLinked = false;
   bool cacheToneEqEnabled = true;
   float cacheTargetLoudness = -18.0f;
   bool cacheCalibrateInput = false;
